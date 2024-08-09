@@ -1,0 +1,4 @@
+project.group=me.omico.consensus
+project.version=0.1.0
+project.versionStage=snapshot
+project.versionStageNumber=0
