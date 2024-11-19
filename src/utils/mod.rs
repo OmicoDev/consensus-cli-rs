@@ -1,8 +1,11 @@
 use git2::Repository;
 use std::collections::HashMap;
+use std::ffi::OsStr;
 use std::fs;
+use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
+use std::process::Stdio;
 
 pub(crate) fn modify_gradle_properties<F>(modifier: F)
 where
@@ -18,18 +21,12 @@ where
 pub(crate) fn commit_gradle_properties(repo_path: PathBuf, message: &str, signed: bool) {
     let repo = Repository::open(repo_path).expect("Failed to open repository");
     let config = repo.config().expect("Failed to get repository config");
-    Command::new("git")
-        .args(["add", GRADLE_PROPERTIES_FILE_NAME])
-        .spawn()
-        .unwrap();
+    execute_git(["add", GRADLE_PROPERTIES_FILE_NAME]);
     let mut commit_command_args = Vec::from(["commit", "-m", message]);
     if signed | config.get_bool("commit.gpgSign").unwrap_or(false) {
         commit_command_args.push("-S");
     }
-    Command::new("git")
-        .args(commit_command_args)
-        .spawn()
-        .unwrap();
+    execute_git(commit_command_args);
 }
 
 pub(crate) const GRADLE_PROPERTIES_FILE_NAME: &str = "gradle.properties";
@@ -65,6 +62,24 @@ fn parse_gradle_properties() -> HashMap<String, String> {
         }
     }
     properties
+}
+
+fn execute_git<I, S>(args: I)
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
+    let mut child = Command::new("git")
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin.write_all(b"\n").unwrap();
+        drop(stdin);
+    }
+    child.wait_with_output().unwrap();
 }
 
 #[test]
